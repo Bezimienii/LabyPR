@@ -37,7 +37,7 @@ DWORD WINAPI funkcjaWatku(void* args)
 	return 0;
 }
 
-int main()
+int main(int argc, char** argv)
 {
 	HANDLE watki[MAX_THREAD];
 	printf_s("Ile chcesz watkow:\n");
@@ -54,13 +54,13 @@ int main()
 	};
 	while(1)
 	{ 
-		printf_s("Wpisz komende");
+		printf_s("Wpisz komende\n");
 		char akcja[2];
 		gets_s(akcja, 2);
 		if (akcja[0] == 'c')
 		{
 			
-			printf_s("Jaki chcesz prioryet dla watkow");
+			printf_s("Jaki chcesz prioryet dla watkow\n");
 			char jakipriorytet[2];
 			gets_s(jakipriorytet, 2);
 			int priorytet = atoi(jakipriorytet);
@@ -97,13 +97,13 @@ int main()
 			{
 				if (TerminateThread(watki[i], 0) == FALSE)
 				{
-					printf_s("Zle zakonczony watek");
+					printf_s("Zle zakonczony watek\n");
 					return 0;
 				}
 				else
 				{
 					aktywne[i] = 0;
-					printf_s("zakonczono watek");	
+					printf_s("zakonczono watek\n");	
 				}
 			}
 			
@@ -112,11 +112,22 @@ int main()
 		{
 			break;
 		}
-		else if (akcja[0] == 'n')
+	}
+	WaitForMultipleObjects(ilewatkow, watki, TRUE, INFINITE);
+	/*
+	for (int i = 0; i < ilewatkow; i++)
+	{
+		if (TerminateThread(watki[i], 0) == FALSE)
 		{
-
+			printf_s("Zle zakonczony watek\n");
+			return 0;
+		}
+		else
+		{
+			aktywne[i] = 0;
+			printf_s("zakonczono watek\n");
 		}
 	}
-	WaitForMultipleObjects(ilosc_watkow, watki, TRUE, INFINITE);
+	*/
 	printf_s("Proces o id: %d sie skonczyl\n", GetCurrentProcessId());
 }
