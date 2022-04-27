@@ -1,0 +1,122 @@
+#include<windows.h>
+#include<stdio.h>
+#include<stdlib.h>
+#include <time.h>
+
+typedef struct dane dane;
+
+#define MAX_THREAD 10
+
+struct dane
+{
+	DWORD proces;
+	int watek;
+}daneWatkow[MAX_THREAD];
+
+int aktywne[MAX_THREAD];
+
+int fib(int n)
+{
+	if (n <= 1)
+	{
+		return n;
+	}
+	return fib(n - 1) + fib(n - 2);
+}
+
+DWORD WINAPI funkcjaWatku(void* args)
+{
+	dane* daneWatku = (dane*)args;
+	clock_t milsecs = clock();
+	fib(45);
+	clock_t czas = clock() - milsecs;
+	double dCzas = ((double)czas) / CLOCKS_PER_SEC;
+	printf_s("W procesie o ID: %d \n", daneWatku->proces);
+	printf_s("Watek o numerze: %d zajal %f\n", daneWatku->watek, dCzas);
+	aktywne[daneWatku->watek] = 0;
+	return 0;
+}
+
+int main()
+{
+	HANDLE watki[MAX_THREAD];
+	printf_s("Ile chcesz watkow:\n");
+	char ilosc_watkow[2];
+	gets_s(ilosc_watkow, 2);
+	int ilewatkow = atoi(ilosc_watkow);
+	int priorytety_watkow[6] = {
+		THREAD_PRIORITY_IDLE,
+		THREAD_PRIORITY_LOWEST,
+		THREAD_PRIORITY_BELOW_NORMAL,
+		THREAD_PRIORITY_NORMAL,
+		THREAD_PRIORITY_ABOVE_NORMAL,
+		THREAD_PRIORITY_HIGHEST
+	};
+	while(1)
+	{ 
+		printf_s("Wpisz komende");
+		char akcja[2];
+		gets_s(akcja, 2);
+		if (akcja[0] == 'c')
+		{
+			
+			printf_s("Jaki chcesz prioryet dla watkow");
+			char jakipriorytet[2];
+			gets_s(jakipriorytet, 2);
+			int priorytet = atoi(jakipriorytet);
+			for (int i = 0; i < ilewatkow; i++)
+			{
+				if (aktywne[i] == 0)
+				{
+					daneWatkow[i].proces = GetCurrentProcessId();
+					daneWatkow[i].watek = i;
+					aktywne[i] = 1;
+					watki[i] = CreateThread(
+						NULL,
+						0,
+						funkcjaWatku,
+						(void*)&daneWatkow[i],
+						0,
+						NULL);
+					if (watki[i] != INVALID_HANDLE_VALUE)
+					{
+						printf(" Utworzono watek o numerze %d \ n ", daneWatkow[i].watek);
+						SetThreadPriority(watki[i], priorytety_watkow[i]);
+					}
+					else
+					{
+						printf("Niepoprawne dojscie\n");
+						return 0;
+					}
+				}
+			}
+		}
+		else if (akcja[0] == 'q')
+		{
+			for (int i = 0; i < ilewatkow; i++)
+			{
+				if (TerminateThread(watki[i], 0) == FALSE)
+				{
+					printf_s("Zle zakonczony watek");
+					return 0;
+				}
+				else
+				{
+					aktywne[i] = 0;
+					printf_s("zakonczono watek");	
+				}
+			}
+			
+		}
+		else if (akcja[0] == 'e')
+		{
+			break;
+		}
+		else if (akcja[0] == 'n')
+		{
+
+		}
+	}
+	WaitForMultipleObjects(ilosc_watkow, watki, TRUE, INFINITE);
+	printf_s("Proces o id: %d sie skonczyl\n", GetCurrentProcessId());
+}
